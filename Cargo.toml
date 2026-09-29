@@ -6,6 +6,7 @@ members = [
     "apps/desktop/src-tauri",
     "tools/archcheck",
 ]
+exclude = ["tools/fuzz"]
 
 [workspace.package]
 version = "0.1.0"

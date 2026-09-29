@@ -147,3 +147,9 @@ vite.config.ts.timestamp-*
 
 # Tauri
 apps/desktop/src-tauri/gen/
+
+# cargo-fuzz
+tools/fuzz/target/
+tools/fuzz/corpus/
+tools/fuzz/artifacts/
+tools/fuzz/coverage/
