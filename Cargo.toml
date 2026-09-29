@@ -1,0 +1,50 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/*",
+    "bin/*",
+    "apps/desktop/src-tauri",
+    "tools/archcheck",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+repository = "https://github.com/sharatk/DeskHop"
+publish = false
+
+[workspace.dependencies]
+# Internal crates.
+proto = { path = "crates/proto" }
+model = { path = "crates/model" }
+engine = { path = "crates/engine" }
+policy = { path = "crates/policy" }
+pairing = { path = "crates/pairing" }
+transport = { path = "crates/transport" }
+ipc = { path = "crates/ipc" }
+win32-input = { path = "crates/win32-input" }
+win32-clipboard = { path = "crates/win32-clipboard" }
+
+# External crates. Versions are pinned here; crates opt in with `workspace = true`
+# only when they use one. proto, model, and engine are the audit surface: adding
+# a dependency to them needs a stated reason in the PR.
+windows = "0.61"
+windows-service = "0.8"
+quinn = "0.11"
+mdns-sd = "0.13"
+snow = "0.9"
+tokio = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[workspace.lints.clippy]
+# Every `unsafe` block carries a `// SAFETY:` comment.
+undocumented_unsafe_blocks = "deny"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
