@@ -1,0 +1,3 @@
+[alias]
+# Enforces the dependency and unsafe rules in AGENTS.md.
+archcheck = "run --quiet -p archcheck --"

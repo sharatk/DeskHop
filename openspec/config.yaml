@@ -1,0 +1,17 @@
+schema: spec-driven
+
+context: |
+  DeskHop: zero-configuration software KVM for Windows 10 22H2 and 11, x64 and ARM64.
+  Read AGENTS.md (stack, repo layout, dependency rules), docs/design-brief.md,
+  and docs/adr/. Accepted ADRs are settled; a proposal that contradicts one
+  proposes a new ADR instead of working around it.
+
+rules:
+  proposal:
+    - Name the crates touched and confirm the change respects the dependency rules in AGENTS.md.
+    - Never introduce a screen-layout grid, a server/client toggle, or an IP address field.
+  design:
+    - A change to proto or ipc bumps its version constant and updates docs/protocol.md.
+    - Changes that cross a trust boundary (LAN, named pipe, secure desktop) update docs/threat-model.md.
+  tasks:
+    - "Engine behavior is verified with replay tests: model events in, routing decisions out."
