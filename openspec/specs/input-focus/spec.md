@@ -43,7 +43,7 @@ The cursor SHALL cross to a peer when all of these hold: it is on an outer side 
 - **THEN** the cursor moves onto the second monitor and focus stays local
 
 ### Requirement: Edges that act as walls
-An outer monitor side SHALL stop the cursor like a normal screen edge, with no crossing, while the layout maps it to no peer, while the mapped peer is not connected, or while any mouse button is held.
+An outer monitor side SHALL stop the cursor like a normal screen edge, with no crossing, while the layout maps it to no peer and layout learning does not place a peer there (see the `layout` capability), while the mapped peer is not connected, or while any mouse button is held.
 
 #### Scenario: Dragging at the edge
 - **WHEN** the user holds the left button to drag a window and pushes against a side mapped to connected peer B
@@ -51,6 +51,10 @@ An outer monitor side SHALL stop the cursor like a normal screen edge, with no c
 
 #### Scenario: Peer not connected
 - **WHEN** a side maps to peer B and B is not connected
+- **THEN** pushing against that side does not change focus
+
+#### Scenario: Unmapped side with nothing to learn
+- **WHEN** a side maps to no peer and no connected peer is unplaced on this machine
 - **THEN** pushing against that side does not change focus
 
 ### Requirement: Corner zones never cross

@@ -37,5 +37,5 @@
 ## 8. Integration checks
 
 - [x] 8.1 Verify every scenario in `specs/layout/spec.md` and `specs/input-focus/spec.md` has a replay test of the same name
-- [ ] 8.2 Verify `cargo test -p proto -p model -p engine -p policy`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo fmt --all --check`, and `cargo archcheck` pass, and that the Linux CI job passes
+- [x] 8.2 Verify `cargo test -p proto -p model -p engine -p policy`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo fmt --all --check`, and `cargo archcheck` pass, and that the Linux CI job passes
 - [x] 8.3 Verify `openspec validate add-layout-learning --strict` passes
