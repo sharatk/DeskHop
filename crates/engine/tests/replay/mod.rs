@@ -154,15 +154,45 @@ impl Desk {
                 .expect("machine on the desk")
                 .handle(event);
             for d in &decisions {
-                if let Decision::Send { peer, msg } = *d
-                    && !self.down.contains(&(to, peer))
-                    && self.engines.contains_key(&peer)
+                if let Decision::Send { peer, msg } = d
+                    && !self.down.contains(&(to, *peer))
+                    && self.engines.contains_key(peer)
                 {
-                    queue.push_back((peer, Event::FromPeer { peer: to, msg }));
+                    queue.push_back((
+                        *peer,
+                        Event::FromPeer {
+                            peer: to,
+                            msg: *msg,
+                        },
+                    ));
                 }
             }
             outcome.0.entry(to).or_default().extend(decisions);
         }
         outcome
+    }
+}
+
+impl Desk {
+    /// The current layout of `machine`.
+    pub fn layout_of(&self, machine: PeerId) -> Layout {
+        self.engines[&machine].layout().clone()
+    }
+
+    /// `n` pushes of `dx, dy` at `(x, y)` on `machine`, 10 ms apart from now.
+    pub fn push(
+        &mut self,
+        machine: PeerId,
+        (dx, dy): (i32, i32),
+        (x, y): (i32, i32),
+        n: u64,
+    ) -> Vec<Outcome> {
+        let start = self.now.0;
+        (0..n)
+            .map(|i| {
+                self.at(start + i * 10);
+                self.physical(machine, motion(dx, dy, x, y))
+            })
+            .collect()
     }
 }

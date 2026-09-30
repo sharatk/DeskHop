@@ -24,6 +24,29 @@
 //! The agent's hook reads the capture mode as a flag; it never waits for the
 //! engine (hook procedures may only enqueue).
 //!
+//! # Layout learning
+//!
+//! The engine keeps a [`LayoutBook`]: one layout per
+//! monitor set, and the current set's layout drives crossing.
+//!
+//! - **Learning:** an unmapped outer side learns its peer when exactly one
+//!   connected peer is unplaced and the user pushes deliberately
+//!   (`push_units`, whatever the sensitivity). Every monitor side that is at
+//!   least partly outer in that direction is filled at once, and the engine
+//!   emits [`Decision::OfferUndo`].
+//! - **Reverse edge:** the machine the cursor enters learns the side toward
+//!   `from` in [`PeerMessage::FocusEnter`], if that side is free and `from` is
+//!   unplaced there.
+//! - **Undo:** [`Event::Undo`] within `undo_ms` removes the side here and, via
+//!   [`PeerMessage::ForgetSide`], on the peer, and withdraws focus from the
+//!   peer if it is still there.
+//! - **Forget layout:** [`Event::ForgetLayout`] empties the book.
+//! - **Monitor sets:** a monitor set seen for the first time inherits each
+//!   side's peer from the previous set.
+//!
+//! Every change is reported as [`Decision::LayoutsChanged`] for storage.
+//! [`Event::LayoutsLoaded`] restores the stored book at start-up.
+//!
 //! # Tuning
 //!
 //! Every tunable number is in [`Tuning::DEFAULT`]:
@@ -31,10 +54,11 @@
 //! | Value | Default | Rule |
 //! |---|---|---|
 //! | `corner_tenths_mm` | 20 (2 mm) | Corner zones at both ends of each monitor side never cross. |
-//! | `push_units` | 20 | Outward raw movement needed to cross with [`EdgeSensitivity::Push`]. |
+//! | `push_units` | 20 | Outward raw movement needed to cross with [`EdgeSensitivity::Push`], and always needed to learn a side. |
 //! | `push_pause_ms` | 250 | A pause longer than this resets the push count. |
 //! | `burst_gap_ms` | 150 | Local movement after a longer stillness starts a new burst. |
 //! | `takeover_ms` | 2000 | A second burst within this long after the first, or one burst this long, takes control back. |
+//! | `undo_ms` | 10000 | How long after learning a side Undo still works. |
 
 #![forbid(unsafe_code)]
 
@@ -42,8 +66,8 @@ use std::collections::BTreeSet;
 
 use model::geometry::corner_zone_px;
 use model::{
-    Button, EdgeFraction, InputAction, InputEvent, Key, Layout, Millis, MonitorId, Origin, PeerId,
-    PeerMessage, Point, Screen, Side,
+    Button, EdgeFraction, InputAction, InputEvent, Key, Layout, LayoutBook, Millis, MonitorId,
+    MonitorSetKey, Origin, PeerId, PeerMessage, Point, Screen, Side,
 };
 
 /// Every tunable number the engine uses.
@@ -54,6 +78,7 @@ pub struct Tuning {
     pub push_pause_ms: u64,
     pub burst_gap_ms: u64,
     pub takeover_ms: u64,
+    pub undo_ms: u64,
 }
 
 impl Tuning {
@@ -63,6 +88,7 @@ impl Tuning {
         push_pause_ms: 250,
         burst_gap_ms: 150,
         takeover_ms: 2000,
+        undo_ms: 10_000,
     };
 }
 
@@ -118,12 +144,22 @@ pub enum Event {
     PeerConnected(PeerId),
     PeerLost(PeerId),
     ScreenChanged(Screen),
+    /// Sets the current monitor set's layout (tests, and later the
+    /// arrangement view). Not reported back as a change.
     LayoutChanged(Layout),
+    /// Layouts stored earlier, at start-up.
+    LayoutsLoaded(LayoutBook),
     ConfigChanged(Config),
+    /// The user chose Undo on the learning notice.
+    Undo {
+        at: Millis,
+    },
+    /// The user chose Forget layout.
+    ForgetLayout,
 }
 
 /// What the host must do.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Decision {
     /// Publish a new capture mode to the agent's hook.
     SetCapture(CaptureMode),
@@ -137,6 +173,10 @@ pub enum Decision {
     RequestSecureAttention,
     /// Focus moved; for the UI and diagnostics.
     FocusChanged(FocusView),
+    /// The layouts changed; store this book.
+    LayoutsChanged(LayoutBook),
+    /// Show the notice that `side` was learned toward `peer`, with Undo.
+    OfferUndo { peer: PeerId, side: Side },
 }
 
 /// Keys and buttons held down somewhere as a result of one input stream.
@@ -220,6 +260,14 @@ struct Crossing {
     fraction: EdgeFraction,
 }
 
+/// The most recent learned side, which Undo can take back.
+#[derive(Debug, Clone, Copy)]
+struct Learned {
+    peer: PeerId,
+    side: Side,
+    at: Millis,
+}
+
 /// Focus and routing for one machine.
 #[derive(Debug, Clone)]
 pub struct Engine {
@@ -227,7 +275,11 @@ pub struct Engine {
     config: Config,
     tuning: Tuning,
     screen: Screen,
+    /// Layouts for every monitor set seen; `layout` is the current set's.
+    book: LayoutBook,
+    set_key: MonitorSetKey,
     layout: Layout,
+    undo: Option<Learned>,
     connected: BTreeSet<PeerId>,
     focus: Focus,
     /// Physical keys currently down on this machine's keyboard.
@@ -250,7 +302,10 @@ impl Engine {
             config,
             tuning: Tuning::DEFAULT,
             screen: Screen::default(),
+            book: LayoutBook::default(),
+            set_key: MonitorSetKey::default(),
             layout: Layout::default(),
+            undo: None,
             connected: BTreeSet::new(),
             focus: Focus::Local,
             physical_keys: BTreeSet::new(),
@@ -280,20 +335,143 @@ impl Engine {
                 self.connected.insert(peer);
             }
             Event::PeerLost(peer) => self.on_peer_lost(peer),
-            Event::ScreenChanged(screen) => {
-                self.screen = screen;
+            Event::ScreenChanged(screen) => self.on_screen(screen),
+            Event::LayoutChanged(layout) => {
+                self.book.set(self.set_key.clone(), layout.clone());
+                self.layout = layout;
                 self.push = None;
             }
-            Event::LayoutChanged(layout) => {
-                self.layout = layout;
+            Event::LayoutsLoaded(book) => {
+                self.layout = book.get(&self.set_key).cloned().unwrap_or_default();
+                self.book = book;
                 self.push = None;
             }
             Event::ConfigChanged(config) => {
                 self.config = config;
                 self.push = None;
             }
+            Event::Undo { at } => self.on_undo(at),
+            Event::ForgetLayout => {
+                self.book = LayoutBook::default();
+                self.layout = Layout::default();
+                self.undo = None;
+                self.push = None;
+                self.out.push(Decision::LayoutsChanged(self.book.clone()));
+            }
         }
         std::mem::take(&mut self.out)
+    }
+
+    /// The current monitor set's layout.
+    pub fn layout(&self) -> &Layout {
+        &self.layout
+    }
+
+    // ---- layouts ----
+
+    /// Switches to the new monitor set's layout, building a first-seen set's
+    /// layout from the previous set's sides.
+    fn on_screen(&mut self, screen: Screen) {
+        let key = screen.set_key();
+        self.screen = screen;
+        self.push = None;
+        if key == self.set_key {
+            return;
+        }
+        self.set_key = key;
+        if let Some(known) = self.book.get(&self.set_key) {
+            self.layout = known.clone();
+            return;
+        }
+        let previous = std::mem::take(&mut self.layout);
+        for side in [Side::Left, Side::Right, Side::Top, Side::Bottom] {
+            if let Some(peer) = previous.main_peer(side) {
+                self.fill(side, peer);
+            }
+        }
+        if !self.layout.is_empty() {
+            self.save();
+        }
+    }
+
+    /// Maps `side` of every at-least-partly-outer monitor to `peer`.
+    fn fill(&mut self, side: Side, peer: PeerId) {
+        let ids: Vec<MonitorId> = self
+            .screen
+            .outer_sides(side)
+            .into_iter()
+            .map(|m| m.id.clone())
+            .collect();
+        for id in ids {
+            self.layout.set(id, side, peer);
+        }
+    }
+
+    /// Stores the current layout in the book and reports the book.
+    fn save(&mut self) {
+        self.book.set(self.set_key.clone(), self.layout.clone());
+        self.out.push(Decision::LayoutsChanged(self.book.clone()));
+    }
+
+    /// The one connected peer placed on no side, if there is exactly one.
+    fn sole_unplaced(&self) -> Option<PeerId> {
+        let mut unplaced = self
+            .connected
+            .iter()
+            .copied()
+            .filter(|p| !self.layout.places(*p));
+        let first = unplaced.next()?;
+        unplaced.next().is_none().then_some(first)
+    }
+
+    /// Learns `side` toward `peer` after a push, with Undo on offer.
+    fn learn(&mut self, at: Millis, side: Side, peer: PeerId) {
+        self.fill(side, peer);
+        self.save();
+        self.undo = Some(Learned { peer, side, at });
+        self.out.push(Decision::OfferUndo { peer, side });
+    }
+
+    /// Learns the side the cursor entered through toward the machine whose
+    /// edge it left, if that side is free and that machine is unplaced here.
+    fn learn_reverse(&mut self, side: Side, from: PeerId) {
+        if from == self.local || self.layout.places(from) {
+            return;
+        }
+        let sides = self.screen.outer_sides(side);
+        let free = !sides.is_empty()
+            && sides
+                .iter()
+                .all(|m| self.layout.peer(&m.id, side).is_none());
+        if free {
+            self.fill(side, from);
+            self.save();
+        }
+    }
+
+    fn on_undo(&mut self, at: Millis) {
+        let Some(learned) = self.undo.take() else {
+            return;
+        };
+        if at.since(learned.at) > self.tuning.undo_ms {
+            return;
+        }
+        if self.layout.forget(learned.side, learned.peer) {
+            self.save();
+        }
+        if let Focus::Forwarding { to, exit } = self.focus
+            && to == learned.peer
+        {
+            self.forwarded.clear();
+            self.send(to, PeerMessage::FocusWithdrawn);
+            self.set_focus(Focus::Local, Some(exit));
+        }
+        self.send(
+            learned.peer,
+            PeerMessage::ForgetSide {
+                side: learned.side.opposite(),
+            },
+        );
     }
 
     // ---- local input ----
@@ -344,6 +522,7 @@ impl Engine {
                         PeerMessage::FocusEnter {
                             side: c.side.opposite(),
                             fraction: c.fraction,
+                            from: self.local,
                         },
                     );
                     self.set_focus(
@@ -471,17 +650,24 @@ impl Engine {
                 if m.in_corner(cursor, side, zone) {
                     return None;
                 }
-                let peer = self.layout.peer(&m.id, side)?;
-                self.connected
-                    .contains(&peer)
-                    .then(|| (m.id.clone(), side, amount, peer))
+                match self.layout.peer(&m.id, side) {
+                    Some(peer) => self
+                        .connected
+                        .contains(&peer)
+                        .then(|| (m.id.clone(), side, amount, peer, false)),
+                    // Unmapped: learnable only toward the one unplaced peer.
+                    None => self
+                        .sole_unplaced()
+                        .map(|peer| (m.id.clone(), side, amount, peer, true)),
+                }
             });
-        let Some((monitor, side, amount, peer)) = candidate else {
+        let Some((monitor, side, amount, peer, learning)) = candidate else {
             self.push = None;
             return None;
         };
 
-        if self.config.sensitivity == EdgeSensitivity::Push {
+        // Learning always needs a deliberate push, whatever the sensitivity.
+        if learning || self.config.sensitivity == EdgeSensitivity::Push {
             let total = match &self.push {
                 Some(p)
                     if p.monitor == monitor
@@ -503,6 +689,9 @@ impl Engine {
             }
         }
         self.push = None;
+        if learning {
+            self.learn(at, side, peer);
+        }
         Some(Crossing {
             peer,
             side,
@@ -514,7 +703,14 @@ impl Engine {
 
     fn on_peer(&mut self, peer: PeerId, msg: PeerMessage) {
         match (self.focus, msg) {
-            (Focus::Local, PeerMessage::FocusEnter { side, fraction }) => {
+            (
+                Focus::Local,
+                PeerMessage::FocusEnter {
+                    side,
+                    fraction,
+                    from,
+                },
+            ) => {
                 self.injected.clear();
                 let warp = self.screen.entry_point(side, fraction);
                 self.set_focus(
@@ -524,8 +720,20 @@ impl Engine {
                     },
                     warp,
                 );
+                self.learn_reverse(side, from);
             }
             (_, PeerMessage::FocusEnter { .. }) => self.send(peer, PeerMessage::FocusRefused),
+
+            (Focus::Controlled { by, .. }, PeerMessage::FocusWithdrawn) if by == peer => {
+                let releases: Vec<_> = self.injected.releases().collect();
+                self.out.extend(releases.into_iter().map(Decision::Inject));
+                self.set_focus(Focus::Local, None);
+            }
+            (_, PeerMessage::ForgetSide { side }) => {
+                if self.layout.forget(side, peer) {
+                    self.save();
+                }
+            }
 
             (
                 Focus::Forwarding { to, exit },
@@ -576,12 +784,20 @@ impl Engine {
                 PeerMessage::FocusEnter {
                     side: side.opposite(),
                     fraction,
+                    from,
                 },
             );
             self.set_focus(Focus::Forwarding { to: target, exit }, None);
         } else {
             // Unreachable from here: put the cursor back where it left `from`.
-            self.send(from, PeerMessage::FocusEnter { side, fraction });
+            self.send(
+                from,
+                PeerMessage::FocusEnter {
+                    side,
+                    fraction,
+                    from,
+                },
+            );
         }
     }
 
