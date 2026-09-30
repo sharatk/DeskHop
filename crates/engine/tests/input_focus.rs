@@ -109,6 +109,7 @@ fn instant_crossing() {
                 msg: PeerMessage::FocusEnter {
                     side: Side::Left,
                     fraction: fraction(&hd("A1"), Side::Right, 540),
+                    from: A,
                 },
             },
             Decision::SetCapture(CaptureMode::WithholdAll),

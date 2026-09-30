@@ -140,6 +140,16 @@ pub const fn corner_zone_px(dpi: u32, tenths_mm: u32) -> i32 {
     }
 }
 
+/// True if `n` lies directly beyond `m`'s `side`, edge to edge.
+const fn touches(m: &Rect, n: &Rect, side: Side) -> bool {
+    match side {
+        Side::Left => n.right() == m.x,
+        Side::Right => n.x == m.right(),
+        Side::Top => n.bottom() == m.y,
+        Side::Bottom => n.y == m.bottom(),
+    }
+}
+
 /// A position along a side as a fixed-point fraction: 0 is the start (top or
 /// left), 65535 the end. Identical on every machine and float-free.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -167,6 +177,10 @@ impl EdgeFraction {
     }
 }
 
+/// Identifies a set of connected monitors: the sorted, de-duplicated ids.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+pub struct MonitorSetKey(pub Vec<MonitorId>);
+
 /// The set of monitors a machine currently has.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Screen {
@@ -176,6 +190,47 @@ pub struct Screen {
 impl Screen {
     pub fn new(monitors: Vec<Monitor>) -> Self {
         Self { monitors }
+    }
+
+    /// The key of this monitor set, independent of monitor order.
+    pub fn set_key(&self) -> MonitorSetKey {
+        let mut ids: Vec<MonitorId> = self.monitors.iter().map(|m| m.id.clone()).collect();
+        ids.sort();
+        ids.dedup();
+        MonitorSetKey(ids)
+    }
+
+    /// Monitors whose `side` is outer for at least part of its length: the
+    /// monitors touching that side do not cover all of it.
+    pub fn outer_sides(&self, side: Side) -> Vec<&Monitor> {
+        self.monitors
+            .iter()
+            .filter(|m| self.partly_outer(m, side))
+            .collect()
+    }
+
+    fn partly_outer(&self, m: &Monitor, side: Side) -> bool {
+        let (start, len) = m.rect.span_along(side);
+        let end = start + len;
+        let mut covered: Vec<(i32, i32)> = self
+            .monitors
+            .iter()
+            .filter(|n| touches(&m.rect, &n.rect, side))
+            .filter_map(|n| {
+                let (s, l) = n.rect.span_along(side);
+                let (s, e) = (s.max(start), (s + l).min(end));
+                (s < e).then_some((s, e))
+            })
+            .collect();
+        covered.sort_unstable();
+        let mut reach = start;
+        for (s, e) in covered {
+            if s > reach {
+                return true;
+            }
+            reach = reach.max(e);
+        }
+        reach < end
     }
 
     pub fn monitor_at(&self, p: Point) -> Option<&Monitor> {
@@ -359,6 +414,60 @@ mod tests {
         let f = EdgeFraction::of(1100, 2280);
         let p = s.entry_point(Side::Left, f).unwrap();
         assert_eq!(p, Point::new(0, 1079));
+    }
+
+    #[test]
+    fn set_key_ignores_monitor_order() {
+        let a = monitor("a", 0, 0, 1920, 1080, 96);
+        let b = monitor("b", 1920, 0, 1920, 1080, 96);
+        let one = Screen::new(vec![a.clone(), b.clone()]);
+        let other = Screen::new(vec![b, a]);
+        assert_eq!(one.set_key(), other.set_key());
+    }
+
+    fn ids(monitors: Vec<&Monitor>) -> Vec<&str> {
+        monitors.iter().map(|m| m.id.0.as_str()).collect()
+    }
+
+    #[test]
+    fn outer_sides_of_one_monitor() {
+        let s = Screen::new(vec![monitor("a", 0, 0, 1920, 1080, 96)]);
+        for side in [Side::Left, Side::Right, Side::Top, Side::Bottom] {
+            assert_eq!(ids(s.outer_sides(side)), ["a"]);
+        }
+    }
+
+    #[test]
+    fn outer_sides_side_by_side() {
+        let s = Screen::new(vec![
+            monitor("a", 0, 0, 1920, 1080, 96),
+            monitor("b", 1920, 0, 1920, 1080, 96),
+        ]);
+        assert_eq!(ids(s.outer_sides(Side::Right)), ["b"]);
+        assert_eq!(ids(s.outer_sides(Side::Left)), ["a"]);
+        assert_eq!(ids(s.outer_sides(Side::Top)), ["a", "b"]);
+    }
+
+    #[test]
+    fn outer_sides_stacked() {
+        let s = Screen::new(vec![
+            monitor("top", 0, 0, 1920, 1080, 96),
+            monitor("bottom", 0, 1080, 1920, 1080, 96),
+        ]);
+        assert_eq!(ids(s.outer_sides(Side::Right)), ["top", "bottom"]);
+        assert_eq!(ids(s.outer_sides(Side::Bottom)), ["bottom"]);
+    }
+
+    #[test]
+    fn outer_sides_taller_beside_shorter() {
+        // The taller monitor sticks out above the shorter one.
+        let s = Screen::new(vec![
+            monitor("tall", 0, 0, 1920, 1440, 96),
+            monitor("short", 1920, 360, 1920, 1080, 96),
+        ]);
+        assert_eq!(ids(s.outer_sides(Side::Right)), ["tall", "short"]);
+        // The shorter one's left side lies entirely against the taller one.
+        assert_eq!(ids(s.outer_sides(Side::Left)), ["tall"]);
     }
 
     #[test]
