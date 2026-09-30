@@ -50,5 +50,5 @@
 ## 10. Integration checks
 
 - [x] 10.1 Verify every scenario in `specs/input-focus/spec.md` has a replay test of the same name (checked with a grep of scenario titles against test names)
-- [ ] 10.2 Verify `cargo test -p proto -p model -p engine -p policy`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo fmt --all --check`, and `cargo archcheck` pass, and that the Linux CI job passes
+- [x] 10.2 Verify `cargo test -p proto -p model -p engine -p policy`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo fmt --all --check`, and `cargo archcheck` pass, and that the Linux CI job passes
 - [x] 10.3 Verify `openspec validate add-edge-transitions --strict` passes
