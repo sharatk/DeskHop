@@ -1,6 +1,6 @@
 # ADR 0004 — Symmetric peers, mDNS + pairing code, QUIC over Noise
 
-**Status:** Accepted (shape); details to be settled in `openspec/` changes. Amendment 1 (pairing) Proposed 2026-09-28. Layout refined by ADR 0005.
+**Status:** Accepted (shape); details to be settled in `openspec/` changes. Amendment 1 (pairing) Accepted 2026-09-29. Layout refined by ADR 0005.
 **Date:** 2026-09-27
 
 ## Context
@@ -41,7 +41,7 @@ Input has two traffic classes. Mouse motion is high-rate, loss-tolerant, and sta
 
 ## Amendment 1 — Pairing by typed code with a PAKE
 
-**Status:** Proposed
+**Status:** Accepted (2026-09-29)
 **Date:** 2026-09-28
 
 ### Context

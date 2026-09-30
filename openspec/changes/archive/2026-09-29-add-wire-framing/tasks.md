@@ -33,11 +33,11 @@
 ## 6. Fuzzing
 
 - [x] 6.1 Create `tools/fuzz` as a cargo-fuzz project with `decode_stream` (frame decoding plus handshake) and `decode_datagram` targets, each with `#![forbid(unsafe_code)]`, and add `exclude = ["tools/fuzz"]` to the workspace; verify `cargo build --workspace` still succeeds on stable and `cargo archcheck` still passes
-- [ ] 6.2 Add `.github/workflows/fuzz.yml`: nightly schedule plus manual trigger, nightly Rust on Linux, each target for 300 seconds, crash inputs uploaded as artifacts; verify with a manual run that both targets complete without crashes
+- [x] 6.2 Add `.github/workflows/fuzz.yml`: nightly schedule plus manual trigger, nightly Rust on Linux, each target for 300 seconds, crash inputs uploaded as artifacts; verify with a manual run that both targets complete without crashes
 - [x] 6.3 Update the fuzzers row in `tools/README.md` from Planned to Ready, with the command to run a target locally; verify the documented command matches the workflow
 
 ## 7. Integration checks
 
-- [ ] 7.1 Verify `cargo test -p proto -p model -p engine -p policy` passes on Linux CI and `cargo test --workspace` passes on Windows
+- [x] 7.1 Verify `cargo test -p proto -p model -p engine -p policy` passes on Linux CI and `cargo test --workspace` passes on Windows
 - [x] 7.2 Verify `cargo clippy --workspace --all-targets -- -D warnings`, `cargo fmt --all --check`, and `cargo archcheck` pass
 - [x] 7.3 Verify `openspec validate add-wire-framing --strict` passes
