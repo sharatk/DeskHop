@@ -5,8 +5,9 @@
 use proto::datagram::MAX_DATAGRAM_LEN;
 use proto::frame::{self, Decoded, HEADER_LEN};
 use proto::hello::Hello;
+use proto::pairing::{Change, MemberRecord, Name, PairConfirm, PairPake, PairingMessage};
 use proto::registry;
-use proto::session::Session;
+use proto::session::{ControlEvent, Message, Session, StreamEvent};
 
 const ITERATIONS: usize = 300_000;
 
@@ -45,17 +46,38 @@ fn drive_stream(session: &mut Session, input: &[u8], rng: &mut Rng) {
             Ok(Decoded::Frame { frame, consumed }) => {
                 assert!(consumed >= HEADER_LEN && consumed <= rest.len());
                 assert_eq!(consumed - HEADER_LEN, frame.payload.len());
-                let ok = if rng.below(2) == 0 {
-                    session.on_control_frame(frame).is_ok()
+                let message = if rng.below(2) == 0 {
+                    match session.on_control_frame(frame) {
+                        Ok(ControlEvent::Message(m)) => Some(m),
+                        Ok(ControlEvent::Agreed(_)) => None,
+                        Err(_) => return,
+                    }
                 } else {
-                    session.on_stream_frame(frame).is_ok()
+                    match session.on_stream_frame(frame) {
+                        Ok(StreamEvent::Message(m)) => Some(m),
+                        Ok(StreamEvent::Wait) => None,
+                        Err(_) => return,
+                    }
                 };
-                if !ok {
-                    return;
+                if let Some(m) = message {
+                    decode_payload(m);
                 }
                 rest = &rest[consumed..];
             }
         }
+    }
+}
+
+/// Decodes a message's payload by its type; a decoded message re-encodes to
+/// the same payload.
+fn decode_payload(m: Message<'_>) {
+    if m.info.ty == registry::HELLO {
+        return;
+    }
+    if let Ok(decoded) = PairingMessage::decode(m.info.ty, m.payload) {
+        let mut out = Vec::new();
+        decoded.encode_frame(&mut out).unwrap();
+        assert_eq!(&out[HEADER_LEN..], m.payload);
     }
 }
 
@@ -71,16 +93,50 @@ fn agreed_session() -> Session {
     session
 }
 
-/// A few valid frames back to back: a `Hello`, then assorted types.
+/// A few valid frames back to back: a `Hello`, then assorted types, half of
+/// them well-formed pairing messages.
 fn valid_frames(rng: &mut Rng) -> Vec<u8> {
     let mut out = Vec::new();
     Hello::this_release().encode_frame(&mut out).unwrap();
     for _ in 0..rng.below(4) {
-        let ty = rng.below(4) as u16;
-        let payload = rng.bytes_below(12);
-        frame::encode(ty, &payload, &mut out).unwrap();
+        if rng.below(2) == 0 {
+            pairing_message(rng).encode_frame(&mut out).unwrap();
+        } else {
+            let ty = rng.below(7) as u16;
+            let payload = rng.bytes_below(12);
+            frame::encode(ty, &payload, &mut out).unwrap();
+        }
     }
     out
+}
+
+const NAMES: [&str; 3] = ["A", "DESK-B", "Living room PC"];
+
+fn array<const N: usize>(rng: &mut Rng) -> [u8; N] {
+    rng.bytes(N).try_into().unwrap()
+}
+
+fn pairing_message(rng: &mut Rng) -> PairingMessage<'static> {
+    let name = Name::new(NAMES[rng.below(NAMES.len())]).unwrap();
+    match rng.below(4) {
+        0 => PairingMessage::Pake(PairPake(array(rng))),
+        1 => PairingMessage::Confirm(PairConfirm {
+            tag: array(rng),
+            name,
+        }),
+        2 => PairingMessage::Record(MemberRecord {
+            subject: array(rng),
+            epoch: rng.next(),
+            signer: array(rng),
+            change: if rng.below(2) == 0 {
+                Change::Add(name)
+            } else {
+                Change::Remove
+            },
+            signature: array(rng),
+        }),
+        _ => PairingMessage::RecordsDone,
+    }
 }
 
 fn mutate(input: &mut Vec<u8>, rng: &mut Rng) {

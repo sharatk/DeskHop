@@ -25,6 +25,7 @@ pub mod datagram;
 pub mod error;
 pub mod frame;
 pub mod hello;
+pub mod pairing;
 pub mod registry;
 pub mod session;
 
@@ -42,6 +43,11 @@ pub enum CloseReason {
     Normal,
     ProtocolError,
     VersionMismatch,
+    /// A key-confirmation tag was wrong: the codes differ, or something relayed
+    /// the connection.
+    WrongPairingCode,
+    /// The machine is not in pairing mode, or another attempt is running.
+    NotReadyToPair,
 }
 
 impl CloseReason {
@@ -51,6 +57,8 @@ impl CloseReason {
             Self::Normal => 0,
             Self::ProtocolError => 1,
             Self::VersionMismatch => 2,
+            Self::WrongPairingCode => 3,
+            Self::NotReadyToPair => 4,
         }
     }
 
@@ -60,6 +68,8 @@ impl CloseReason {
             0 => Some(Self::Normal),
             1 => Some(Self::ProtocolError),
             2 => Some(Self::VersionMismatch),
+            3 => Some(Self::WrongPairingCode),
+            4 => Some(Self::NotReadyToPair),
             _ => None,
         }
     }
@@ -75,10 +85,12 @@ mod tests {
             CloseReason::Normal,
             CloseReason::ProtocolError,
             CloseReason::VersionMismatch,
+            CloseReason::WrongPairingCode,
+            CloseReason::NotReadyToPair,
         ] {
             assert_eq!(CloseReason::from_code(reason.code()), Some(reason));
         }
-        assert_eq!(CloseReason::from_code(3), None);
+        assert_eq!(CloseReason::from_code(5), None);
     }
 
     #[test]
@@ -86,5 +98,7 @@ mod tests {
         assert_eq!(CloseReason::Normal.code(), 0);
         assert_eq!(CloseReason::ProtocolError.code(), 1);
         assert_eq!(CloseReason::VersionMismatch.code(), 2);
+        assert_eq!(CloseReason::WrongPairingCode.code(), 3);
+        assert_eq!(CloseReason::NotReadyToPair.code(), 4);
     }
 }
