@@ -34,6 +34,12 @@ pub enum ProtocolError {
     HelloTooShort { len: usize },
     /// A `Hello` whose lowest version is 0 or above its highest.
     InvalidVersionRange { min: u16, max: u16 },
+    /// A machine name length outside its range for the message.
+    InvalidNameLength { len: usize },
+    /// A machine name that is not UTF-8.
+    NameNotUtf8,
+    /// A `MemberRecord` kind other than addition or removal.
+    InvalidRecordKind { kind: u8 },
     /// Input after the session already failed.
     SessionFailed,
 }
@@ -64,6 +70,11 @@ impl fmt::Display for ProtocolError {
             Self::InvalidVersionRange { min, max } => {
                 write!(f, "invalid version range {min}..={max}")
             }
+            Self::InvalidNameLength { len } => {
+                write!(f, "machine name of {len} bytes out of range")
+            }
+            Self::NameNotUtf8 => write!(f, "machine name is not UTF-8"),
+            Self::InvalidRecordKind { kind } => write!(f, "unknown membership record kind {kind}"),
             Self::SessionFailed => write!(f, "session already failed"),
         }
     }

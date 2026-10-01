@@ -34,6 +34,16 @@ windows = "0.61"
 windows-service = "0.8"
 quinn = "0.11"
 mdns-sd = "0.13"
+# Pairing cryptography. Versions follow the stack spake2 0.4 builds on
+# (curve25519-dalek 4, sha2 0.10), so each primitive is compiled once; update
+# them together when spake2 moves.
+spake2 = "0.4"
+ed25519-dalek = { version = "2", features = ["rand_core", "zeroize"] }
+hkdf = "0.12"
+sha2 = "0.10"
+rand_core = { version = "0.6", features = ["getrandom"] }
+subtle = "2"
+zeroize = "1"
 tokio = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

@@ -1,6 +1,6 @@
 # ADR 0004 — Symmetric peers, mDNS + pairing code, QUIC over Noise (amended)
 
-**Status:** Accepted (shape); details to be settled in `openspec/` changes. Amendment 1 (pairing) Accepted 2026-09-29. Amendment 2 (QUIC TLS pinned to identity keys; Noise dropped) Proposed. Layout refined by ADR 0005.
+**Status:** Accepted (shape); details to be settled in `openspec/` changes. Amendment 1 (pairing) Accepted 2026-09-29. Amendment 2 (QUIC TLS pinned to identity keys; Noise dropped) Accepted 2026-10-01. Layout refined by ADR 0005.
 **Date:** 2026-09-27
 
 ## Context
@@ -70,7 +70,7 @@ A short typed code cannot be used directly as a Noise pre-shared key: anyone who
 
 ## Amendment 2 — QUIC TLS pinned to identity keys; Noise dropped; desk membership
 
-**Status:** Proposed
+**Status:** Accepted (2026-10-01)
 **Date:** 2026-10-01
 
 ### Context
