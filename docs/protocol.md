@@ -11,7 +11,7 @@ This document is written so that a third party could implement a compatible peer
 
 ## Peer wire protocol
 
-Shape: ADR 0004. Symmetric peers, mDNS/DNS-SD discovery with pair-by-code fallback, a PAKE-authenticated Noise pairing, and QUIC with datagrams for motion and streams for everything else. Normative requirements: `openspec/specs/wire-protocol/spec.md`. All integers are little-endian.
+Shape: ADR 0004. Symmetric peers, mDNS/DNS-SD discovery with pair-by-code fallback, PAKE pairing over QUIC whose TLS is pinned to each peer's identity key, and QUIC with datagrams for motion and streams for everything else. Normative requirements: `openspec/specs/wire-protocol/spec.md`. All integers are little-endian.
 
 ### Stream frames
 
