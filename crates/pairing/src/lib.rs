@@ -1,3 +1,3 @@
-//! Identity keys, Noise handshake, pairing codes, trust store.
+//! Identity keys, PAKE pairing, desk membership, trust store.
 
 #![forbid(unsafe_code)]

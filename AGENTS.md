@@ -9,7 +9,7 @@ Read `docs/design-brief.md` once. Architectural decisions live in `docs/adr/` an
 - Rust, edition 2024, stable toolchain. Cargo workspace.
 - Tauri 2 shell with React + TypeScript. The shell is thin: tray, autostart, updater, pipe client. No engine logic in `src-tauri`.
 - Windows 10 22H2 and 11, x64 and ARM64. Nothing else.
-- Key crates: `windows-rs` (Win32), `windows-service`, `quinn` (QUIC), `mdns-sd` (discovery), `snow` (Noise), `tokio` (async, named pipes), `serde`.
+- Key crates: `windows-rs` (Win32), `windows-service`, `quinn` (QUIC), `mdns-sd` (discovery), `rustls` (QUIC's TLS, pinned to identity keys), `spake2` (pairing PAKE), `tokio` (async, named pipes), `serde`.
 
 ## Process topology (ADR 0002)
 
@@ -27,7 +27,7 @@ Service, agents, and UI talk over named pipes using the `ipc` crate.
 ```
 crates/
   proto/            wire messages, framing, versioning — no I/O
-  pairing/          identity keys, Noise handshake, pairing codes, trust store
+  pairing/          identity keys, PAKE pairing, desk membership, trust store
   transport/        QUIC, mDNS discovery, datagrams for motion, streams for the rest
   model/            neutral input events, screen geometry, edge→peer layout graph
   engine/           state machine: focus owner, edge transitions, routing, layout learning
