@@ -7,6 +7,20 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
+proto.workspace = true
+model.workspace = true
+pairing.workspace = true
+quinn.workspace = true
+rustls.workspace = true
+rcgen.workspace = true
+rustls-webpki.workspace = true
+mdns-sd.workspace = true
+if-addrs.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "sync", "time", "net"] }
+rand_core.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "sync", "time", "net", "test-util"] }
 
 [lints]
 workspace = true

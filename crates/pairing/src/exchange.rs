@@ -128,6 +128,8 @@ pub enum JoinFailure {
     DeskFull,
     /// The connection closed before pairing completed.
     ConnectionLost,
+    /// No candidate address answered.
+    Unreachable,
 }
 
 enum JoinerState {
@@ -240,7 +242,9 @@ impl Joiner {
         Some(match reason {
             Some(CloseReason::WrongPairingCode) => JoinFailure::WrongCode,
             Some(CloseReason::NotReadyToPair) => JoinFailure::NotReady,
-            Some(CloseReason::ProtocolError) => JoinFailure::ProtocolError,
+            Some(CloseReason::ProtocolError | CloseReason::NotAMember) => {
+                JoinFailure::ProtocolError
+            }
             _ => JoinFailure::ConnectionLost,
         })
     }

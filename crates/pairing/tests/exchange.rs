@@ -594,6 +594,7 @@ fn inviter_close_codes_reach_the_joiner() {
         (CloseReason::WrongPairingCode, JoinFailure::WrongCode),
         (CloseReason::NotReadyToPair, JoinFailure::NotReady),
         (CloseReason::ProtocolError, JoinFailure::ProtocolError),
+        (CloseReason::NotAMember, JoinFailure::ProtocolError),
         (CloseReason::Normal, JoinFailure::ConnectionLost),
     ] {
         let (mut j, _) = Joiner::start(&code, binding(&b, &a), &mut rng(1));

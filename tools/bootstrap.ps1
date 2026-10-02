@@ -23,11 +23,39 @@ function Install-WingetPackage([string]$Id, [string[]]$Extra = @()) {
     if ($LASTEXITCODE -ne 0) { throw "winget install $Id failed ($LASTEXITCODE)" }
 }
 
-# MSVC linker and Windows SDK for x64 and ARM64.
+# MSVC linker and Windows SDK for x64 and ARM64, and clang, which ring needs to
+# build for ARM64.
+$vsComponents = @(
+    'Microsoft.VisualStudio.Workload.VCTools',
+    'Microsoft.VisualStudio.Component.VC.Tools.ARM64',
+    'Microsoft.VisualStudio.Component.VC.Llvm.Clang'
+)
 Install-WingetPackage 'Microsoft.VisualStudio.2022.BuildTools' @(
     '--override',
-    '--wait --passive --add Microsoft.VisualStudio.Workload.VCTools --add Microsoft.VisualStudio.Component.VC.Tools.ARM64 --includeRecommended'
+    ('--wait --passive --includeRecommended ' + (($vsComponents | ForEach-Object { "--add $_" }) -join ' '))
 )
+
+# winget skips an existing Build Tools install, so add components that a
+# previous run did not have.
+$vsInstaller = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer"
+$vsPath = & "$vsInstaller\vswhere.exe" -products * -requires Microsoft.VisualStudio.Workload.VCTools -latest -property installationPath
+foreach ($component in $vsComponents) {
+    $has = @(& "$vsInstaller\vswhere.exe" -products * -requires $component -property installationPath) -contains $vsPath
+    if ($has) { Write-Host "ok   $component"; continue }
+    Write-Host "add  $component"
+    $p = Start-Process -FilePath "$vsInstaller\setup.exe" -Wait -PassThru -ArgumentList @(
+        'modify', '--installPath', "`"$vsPath`"", '--add', $component, '--passive', '--norestart'
+    )
+    if ($p.ExitCode -notin 0, 3010) { throw "Visual Studio installer failed adding $component ($($p.ExitCode))" }
+}
+
+# ring's build finds clang on PATH.
+$llvmBin = Join-Path $vsPath 'VC\Tools\Llvm\x64\bin'
+$userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+if ((Test-Path "$llvmBin\clang.exe") -and ($userPath -notlike "*$llvmBin*")) {
+    Write-Host "add  $llvmBin to user PATH"
+    [Environment]::SetEnvironmentVariable('Path', "$userPath;$llvmBin", 'User')
+}
 Install-WingetPackage 'Rustlang.Rustup'
 Install-WingetPackage 'OpenJS.NodeJS.LTS'
 Install-WingetPackage 'Microsoft.DotNet.SDK.8'   # WiX v5 ships as a .NET tool.
