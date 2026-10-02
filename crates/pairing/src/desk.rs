@@ -39,6 +39,8 @@ pub struct Applied {
     pub forgotten: bool,
     /// Records not accepted: a bad signature, an unknown signer, or no room.
     pub dropped: usize,
+    /// Records that won and were stored, in the order they were accepted.
+    pub accepted: Vec<SignedRecord>,
 }
 
 enum Outcome {
@@ -141,6 +143,7 @@ impl Desk {
         }
         let was_member = self.is_member(&subject);
         let removes_me = subject == self.me && record.is_removal();
+        applied.accepted.push(record.clone());
         self.records.insert(subject, record);
         if removes_me {
             self.forget();
@@ -458,6 +461,31 @@ mod tests {
     fn adding_myself_is_refused() {
         let mut a = machine(1, "A");
         assert_eq!(a.add(a.peer_id(), name("A"), T), Err(AddError::Myself));
+    }
+
+    #[test]
+    fn accepted_records_are_listed_in_order() {
+        let (mut a, b, c) = desk_of_two();
+        let d = machine(4, "D");
+        let stranger = machine(9, "S");
+        let stale = record(&b, c.peer_id(), 1, Change::Add(name("C")));
+        a.apply([record(&b, c.peer_id(), 5, Change::Add(name("C")))]);
+        // E by D arrives before D is known, so it is accepted second.
+        let e = machine(5, "E");
+        let e_by_d = record(&d, e.peer_id(), 1, Change::Add(name("E")));
+        let d_by_b = record(&b, d.peer_id(), 1, Change::Add(name("D")));
+        let by_stranger = record(&stranger, machine(6, "F").peer_id(), 1, Change::Remove);
+        let applied = a.apply([e_by_d.clone(), stale, d_by_b.clone(), by_stranger]);
+        assert_eq!(applied.accepted, [d_by_b, e_by_d]);
+        assert_eq!(applied.dropped, 1);
+    }
+
+    #[test]
+    fn single_record_lists_what_it_stored() {
+        let (mut a, b, c) = desk_of_two();
+        let add = record(&b, c.peer_id(), 1, Change::Add(name("C")));
+        assert_eq!(a.apply([add.clone()]).accepted, std::slice::from_ref(&add));
+        assert!(a.apply([add]).accepted.is_empty());
     }
 
     #[test]

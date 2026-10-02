@@ -69,9 +69,68 @@ Hello payload:
 - Before the version is agreed, datagrams are dropped, and frames on other streams are held unread until agreement (QUIC does not order data across streams).
 - `Hello` ignores bytes after `max`, so later versions can append fields. The first four bytes never change.
 
+### Transport
+
+Normative requirements: `openspec/specs/peer-transport/spec.md` and `openspec/specs/discovery/spec.md`.
+
+**QUIC over UDP port 47391.** Every machine listens there, and dials peers on 47391 unless an mDNS advertisement names another port. A single UDP socket both listens and dials, so a peer's source address is also where it can be dialed back.
+
+**TLS 1.3 only, signature scheme Ed25519 only.**
+
+- *Certificates:* each side presents a self-signed X.509 certificate, in both directions, whose SubjectPublicKeyInfo is exactly the 44-byte RFC 8410 Ed25519 encoding `30 2a 30 05 06 03 2b 65 70 03 21 00` followed by the 32-byte key. That key is the machine's peer identity. Names, validity dates, extensions, and the issuer are ignored. The handshake signature proves possession of the key.
+- *Pinning:* a dialer reaching a member accepts only that member's key. A dialer that is pairing accepts any key and uses it as the inviter's identity. A listener accepts any Ed25519 key during the handshake and decides afterwards.
+- *Server name:* dialers send `deskhop`, and it is ignored.
+
+**ALPN.**
+
+| ALPN | Connection | After `Hello` |
+|---|---|---|
+| `deskhop/1` | Member | The record exchange below |
+| `deskhop-pair/1` | Pairing | The pairing exchange ([Pairing](#pairing)) |
+
+Any other ALPN fails the handshake.
+
+**Control stream.** The dialer opens the connection's first bidirectional stream. Both sides write `Hello` on it at once ([Hello and version negotiation](#hello-and-version-negotiation)). Every message in this document travels on it. A side finishes the stream only just before closing the connection.
+
+**Member connections.**
+
+1. The dialer sends every winning `MemberRecord` it holds, then `RecordsDone`.
+2. The listener applies them. If the dialer's key is still not a member of the listener's view, the listener closes with code `5` and sends no records. Otherwise it sends its own records, then `RecordsDone`.
+3. Each side counts the other as up once both `RecordsDone` messages have crossed.
+4. After that, a `MemberRecord` is a single update, sent whenever a side's view gains or changes a record.
+
+A removed member's connection receives the removal, then a close with code `5`.
+
+**One connection per pair.** When two member connections between the same two machines are both up, both sides keep the one dialed by the machine whose peer identity is lower (comparing the 32 bytes in order), and close the other with code `0`.
+
+**Liveness.**
+
+- A side sends a keepalive after 250 ms without sending anything else. The QUIC idle timeout is 1 s, so a peer silent for 1 s is lost.
+- Close code `0` on a member connection is a goodbye: the peer is down at once.
+
+**Strangers.** A connection from a key that is not a member must send `PairPake` (pairing) or finish introducing itself (member) within 10 s. At most 8 such connections are held at once, and more are closed at once: with `4` on pairing connections and `5` on member connections.
+
+**mDNS (DNS-SD).** Each machine advertises service type `_deskhop._udp.local.`:
+
+| Field | Value |
+|---|---|
+| Instance name | First 16 bytes of the peer identity, lowercase hex (32 digits) |
+| Port | The QUIC port |
+| TXT `id` | The full peer identity, lowercase hex (64 digits) |
+| TXT `pair` | `1` while pairing mode is open; absent otherwise |
+
+An advertisement is a hint and is never trusted by itself: dialing pins the identity it names.
+
+**Joining by code.** The joiner dials these candidates at once, on port 47391 or the advertised port:
+
+- the code's locator rebuilt onto each of its own IPv4 interfaces;
+- every `pair=1` advertisement whose IPv4 address ends in the locator.
+
+The first candidate to answer `PairPake` with its own carries on, and the rest are closed with `0`.
+
 ### Identity
 
-Each machine has one Ed25519 key. Its 32-byte public key is the machine's peer identity, and its TLS certificate carries that key. Normative requirements: `openspec/specs/pairing/spec.md`.
+Each machine has one Ed25519 key. Its 32-byte public key is the machine's peer identity, and its TLS certificate carries that key ([Transport](#transport)). Normative requirements: `openspec/specs/pairing/spec.md`.
 
 ### Pairing
 
@@ -168,6 +227,7 @@ Sent as the QUIC application error code when closing a connection.
 | `2` | Version mismatch |
 | `3` | Wrong pairing code: a key-confirmation tag did not match |
 | `4` | Not ready to pair: pairing mode is closed, or another attempt is running |
+| `5` | Not a member: the other machine does not count this one as a member of its desk |
 
 ## IPC protocol
 
@@ -179,5 +239,5 @@ No messages are defined yet.
 
 | Protocol | Version | Change |
 |---|---|---|
-| Peer | 1 | Stream frames, datagrams, message-type registry, `Hello` version negotiation, close reasons, pairing (`PairPake`, `PairConfirm`), desk membership (`MemberRecord`, `RecordsDone`). |
+| Peer | 1 | Stream frames, datagrams, message-type registry, `Hello` version negotiation, close reasons, pairing (`PairPake`, `PairConfirm`), desk membership (`MemberRecord`, `RecordsDone`), transport (port 47391, identity certificates, ALPNs, control stream, member connections, one connection per pair, liveness, mDNS), close reason `5`. |
 | IPC | 1 | Initial version; no messages. |

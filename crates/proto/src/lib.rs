@@ -48,6 +48,8 @@ pub enum CloseReason {
     WrongPairingCode,
     /// The machine is not in pairing mode, or another attempt is running.
     NotReadyToPair,
+    /// The other machine does not count this one as a member of its desk.
+    NotAMember,
 }
 
 impl CloseReason {
@@ -59,6 +61,7 @@ impl CloseReason {
             Self::VersionMismatch => 2,
             Self::WrongPairingCode => 3,
             Self::NotReadyToPair => 4,
+            Self::NotAMember => 5,
         }
     }
 
@@ -70,6 +73,7 @@ impl CloseReason {
             2 => Some(Self::VersionMismatch),
             3 => Some(Self::WrongPairingCode),
             4 => Some(Self::NotReadyToPair),
+            5 => Some(Self::NotAMember),
             _ => None,
         }
     }
@@ -87,10 +91,11 @@ mod tests {
             CloseReason::VersionMismatch,
             CloseReason::WrongPairingCode,
             CloseReason::NotReadyToPair,
+            CloseReason::NotAMember,
         ] {
             assert_eq!(CloseReason::from_code(reason.code()), Some(reason));
         }
-        assert_eq!(CloseReason::from_code(5), None);
+        assert_eq!(CloseReason::from_code(6), None);
     }
 
     #[test]
@@ -100,5 +105,6 @@ mod tests {
         assert_eq!(CloseReason::VersionMismatch.code(), 2);
         assert_eq!(CloseReason::WrongPairingCode.code(), 3);
         assert_eq!(CloseReason::NotReadyToPair.code(), 4);
+        assert_eq!(CloseReason::NotAMember.code(), 5);
     }
 }
