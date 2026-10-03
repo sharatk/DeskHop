@@ -126,7 +126,7 @@ This release SHALL speak protocol version 1 only, advertising a lowest and highe
 - **THEN** the payload is `01 00 01 00`
 
 ### Requirement: Close reasons
-A peer closing a connection SHALL give one of these QUIC application error codes: `0` normal close, `1` protocol error, `2` version mismatch, `3` wrong pairing code, `4` not ready to pair. A peer SHALL close with protocol error whenever this specification calls something a protocol error. New close reasons SHALL be added in `docs/protocol.md` with the version that introduced them.
+A peer closing a connection SHALL give one of these QUIC application error codes: `0` normal close, `1` protocol error, `2` version mismatch, `3` wrong pairing code, `4` not ready to pair, `5` not a member. A peer SHALL close with protocol error whenever this specification calls something a protocol error. New close reasons SHALL be added in `docs/protocol.md` with the version that introduced them.
 
 #### Scenario: Protocol error closes the connection
 - **WHEN** a receiver reports a protocol error on any stream or datagram
@@ -139,6 +139,10 @@ A peer closing a connection SHALL give one of these QUIC application error codes
 #### Scenario: Pairing close codes
 - **WHEN** a receiver reads close code `3` or `4`
 - **THEN** it reports a wrong pairing code or a machine not ready to pair, respectively
+
+#### Scenario: Not a member
+- **WHEN** a receiver reads close code `5`
+- **THEN** it reports that the other machine does not count it as a member of its desk
 
 ### Requirement: Decoding is total and bounded
 Decoding frames, datagrams, and message payloads SHALL NOT panic, abort, or loop forever on any input, and SHALL NOT allocate memory based on a length the peer claims. Memory held for one stream while decoding SHALL be bounded by the 6-byte header plus the 65,536-byte frame limit.
