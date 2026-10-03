@@ -64,6 +64,7 @@
 
 use std::collections::BTreeSet;
 
+pub use model::CaptureMode;
 use model::geometry::corner_zone_px;
 use model::{
     Button, EdgeFraction, InputAction, InputEvent, Key, Layout, LayoutBook, Millis, MonitorId,
@@ -106,17 +107,6 @@ pub enum EdgeSensitivity {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Config {
     pub sensitivity: EdgeSensitivity,
-}
-
-/// Which local input the agent's hook must keep from this machine's OS.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CaptureMode {
-    /// Local focus: withhold nothing.
-    PassAll,
-    /// Forwarding: withhold all physical input; it goes to the peer.
-    WithholdAll,
-    /// Controlled: withhold physical mouse input; keys pass through.
-    WithholdMouse,
 }
 
 /// Where focus is, as seen from outside the engine.
