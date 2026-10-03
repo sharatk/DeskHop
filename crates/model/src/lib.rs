@@ -11,6 +11,6 @@ pub mod layout;
 pub mod time;
 
 pub use geometry::{EdgeFraction, Monitor, MonitorId, MonitorSetKey, Point, Rect, Screen, Side};
-pub use input::{Button, InputAction, InputEvent, Key, Origin};
+pub use input::{Button, CaptureMode, InputAction, InputEvent, Key, Origin};
 pub use layout::{Layout, LayoutBook, PeerId, PeerMessage};
 pub use time::Millis;

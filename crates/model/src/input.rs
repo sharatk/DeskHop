@@ -51,7 +51,8 @@ pub enum InputEvent {
         button: Button,
         down: bool,
     },
-    /// Wheel movement; positive `dy` is away from the user.
+    /// Wheel movement in 1/120 of a notch, as Windows reports it: positive
+    /// `dy` is away from the user, positive `dx` is to the right.
     Wheel {
         dx: i32,
         dy: i32,
@@ -76,6 +77,7 @@ pub enum InputAction {
         button: Button,
         down: bool,
     },
+    /// Wheel movement in 1/120 of a notch; signs as for [`InputEvent::Wheel`].
     Wheel {
         dx: i32,
         dy: i32,
@@ -86,4 +88,16 @@ pub enum InputAction {
         dx: i32,
         dy: i32,
     },
+}
+
+/// Which local physical input the agent's hook keeps from this machine's OS.
+/// Injected input always reaches the OS.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CaptureMode {
+    /// Local focus: withhold nothing.
+    PassAll,
+    /// Forwarding: withhold all physical input; it goes to the peer.
+    WithholdAll,
+    /// Controlled: withhold physical mouse input; keys pass through.
+    WithholdMouse,
 }
